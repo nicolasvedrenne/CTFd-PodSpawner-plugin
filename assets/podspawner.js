@@ -16,13 +16,25 @@
     if (fromData && fromData.dataset.challengeId) {
       return parseInt(fromData.dataset.challengeId, 10);
     }
-    const modal = document.querySelector("#challenge-window");
+    const modal = document.querySelector("#challenge-window, #challenge-modal");
     if (modal && modal.dataset.challengeId) {
       return parseInt(modal.dataset.challengeId, 10);
     }
-    const match = window.location.pathname.match(/challenges\/(\d+)/);
-    if (match) {
-      return parseInt(match[1], 10);
+    const input = document.querySelector("input[name='challenge_id']");
+    if (input && input.value) {
+      return parseInt(input.value, 10);
+    }
+    const hashMatch = window.location.hash && window.location.hash.match(/#(\d+)/);
+    if (hashMatch) {
+      return parseInt(hashMatch[1], 10);
+    }
+    const pathMatch = window.location.pathname.match(/challenges\/(\d+)/);
+    if (pathMatch) {
+      return parseInt(pathMatch[1], 10);
+    }
+    const internal = window.CTFd && window.CTFd._internal && window.CTFd._internal.challenge;
+    if (internal && internal.id) {
+      return parseInt(internal.id, 10);
     }
     return null;
   }
@@ -84,7 +96,9 @@
 
     const target =
       document.querySelector("#challenge-window .modal-body") ||
+      document.querySelector("#challenge-modal .modal-body") ||
       document.querySelector("#challenge-window") ||
+      document.querySelector("#challenge-modal") ||
       document.querySelector(".challenge-body") ||
       document.querySelector(".challenge-details") ||
       document.querySelector("main") ||
