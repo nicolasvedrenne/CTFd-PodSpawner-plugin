@@ -1,5 +1,6 @@
 (() => {
   const POLL_INTERVAL_MS = 4000;
+  const DETECT_INTERVAL_MS = 500;
 
   let currentChallengeId = null;
   let container = null;
@@ -9,34 +10,60 @@
   let spawnBtn = null;
   let stopBtn = null;
   let pollTimer = null;
+  let detectTimer = null;
   let expiresAt = null;
 
-  function detectChallengeId() {
-    const fromData = document.querySelector("[data-challenge-id]");
-    if (fromData && fromData.dataset.challengeId) {
-      return parseInt(fromData.dataset.challengeId, 10);
+  function parseIntSafe(val) {
+    const n = parseInt(val, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function detectChallengeId(root = document) {
+    if (root && root.dataset && root.dataset.challengeId) {
+      return parseIntSafe(root.dataset.challengeId);
     }
-    const modal = document.querySelector("#challenge-window, #challenge-modal");
-    if (modal && modal.dataset.challengeId) {
-      return parseInt(modal.dataset.challengeId, 10);
-    }
-    const input = document.querySelector("input[name='challenge_id']");
-    if (input && input.value) {
-      return parseInt(input.value, 10);
-    }
+    const attr = root.querySelector("[data-challenge-id]");
+    if (attr && attr.dataset.challengeId) return parseIntSafe(attr.dataset.challengeId);
+
+    const modal = root.querySelector("#challenge-window") || root.querySelector("#challenge-modal");
+    if (modal && modal.dataset && modal.dataset.challengeId)
+      return parseIntSafe(modal.dataset.challengeId);
+
+    const input = root.querySelector("input[name='challenge_id']");
+    if (input && input.value) return parseIntSafe(input.value);
+
+    const hidden = root.querySelector("#challenge-id");
+    if (hidden && hidden.textContent) return parseIntSafe(hidden.textContent.trim());
+
     const hashMatch = window.location.hash && window.location.hash.match(/#(\d+)/);
-    if (hashMatch) {
-      return parseInt(hashMatch[1], 10);
-    }
+    if (hashMatch) return parseIntSafe(hashMatch[1]);
+
     const pathMatch = window.location.pathname.match(/challenges\/(\d+)/);
-    if (pathMatch) {
-      return parseInt(pathMatch[1], 10);
-    }
+    if (pathMatch) return parseIntSafe(pathMatch[1]);
+
     const internal = window.CTFd && window.CTFd._internal && window.CTFd._internal.challenge;
-    if (internal && internal.id) {
-      return parseInt(internal.id, 10);
-    }
+    if (internal && internal.id) return parseIntSafe(internal.id);
+
     return null;
+  }
+
+  function findTarget(root = document) {
+    if (root && typeof root.matches === "function") {
+      if (root.matches("#challenge-window") || root.matches("#challenge-modal")) {
+        return root.querySelector(".modal-body") || root;
+      }
+    }
+    return (
+      root.querySelector("#challenge-window .modal-body") ||
+      root.querySelector("#challenge-modal .modal-body") ||
+      root.querySelector("#challenge-window") ||
+      root.querySelector("#challenge-modal") ||
+      root.querySelector(".challenge-body") ||
+      root.querySelector(".challenge-details") ||
+      root.querySelector("main") ||
+      root.body ||
+      document.body
+    );
   }
 
   function teardown() {
@@ -57,7 +84,7 @@
     currentChallengeId = null;
   }
 
-  function createContainer() {
+  function createContainer(target) {
     container = document.createElement("div");
     container.id = "k8s-spawn-widget";
     container.style.border = "1px solid #e5e5e5";
@@ -94,15 +121,6 @@
     container.appendChild(expiresLine);
     container.appendChild(buttons);
 
-    const target =
-      document.querySelector("#challenge-window .modal-body") ||
-      document.querySelector("#challenge-modal .modal-body") ||
-      document.querySelector("#challenge-window") ||
-      document.querySelector("#challenge-modal") ||
-      document.querySelector(".challenge-body") ||
-      document.querySelector(".challenge-details") ||
-      document.querySelector("main") ||
-      document.body;
     target.appendChild(container);
 
     spawnBtn.addEventListener("click", (e) => {
@@ -206,12 +224,12 @@
     }
   }
 
-  function mountFor(challengeId) {
-    if (!challengeId) return;
-    if (challengeId === currentChallengeId) return;
+  function mountFor(challengeId, target) {
+    if (!challengeId || !target) return;
+    if (challengeId === currentChallengeId && container) return;
     teardown();
     currentChallengeId = challengeId;
-    createContainer();
+    createContainer(target);
     refreshStatus();
     pollTimer = window.setInterval(() => {
       refreshStatus();
@@ -219,15 +237,31 @@
     }, POLL_INTERVAL_MS);
   }
 
-  function tryMount() {
-    const challengeId = detectChallengeId();
-    if (challengeId) {
-      mountFor(challengeId);
+  function detectAndMount(root = document) {
+    const challengeId = detectChallengeId(root);
+    const target = findTarget(root);
+    if (challengeId && target) {
+      mountFor(challengeId, target);
+    } else if (!challengeId && container) {
+      teardown();
     }
   }
 
-  tryMount();
-  const observer = new MutationObserver(tryMount);
-  observer.observe(document.body, { childList: true, subtree: true });
-  window.addEventListener("hashchange", tryMount);
+  function setupDetectors() {
+    detectAndMount();
+    detectTimer = window.setInterval(detectAndMount, DETECT_INTERVAL_MS);
+
+    window.addEventListener("hashchange", detectAndMount);
+    document.addEventListener("shown.bs.modal", (ev) => {
+      const modal = ev.target;
+      if (!modal.matches("#challenge-window, #challenge-modal")) return;
+      detectAndMount(modal);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupDetectors);
+  } else {
+    setupDetectors();
+  }
 })();
