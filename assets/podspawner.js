@@ -32,8 +32,11 @@
     const input = root.querySelector("input[name='challenge_id']");
     if (input && input.value) return parseIntSafe(input.value);
 
-    const hidden = root.querySelector("#challenge-id");
-    if (hidden && hidden.textContent) return parseIntSafe(hidden.textContent.trim());
+    const hidden = root.querySelector("#challenge-id, .challenge-id");
+    if (hidden) {
+      const val = hidden.value || hidden.getAttribute("value") || hidden.textContent;
+      if (val) return parseIntSafe(val.trim());
+    }
 
     const hashMatch = window.location.hash && window.location.hash.match(/#(\d+)/);
     if (hashMatch) return parseIntSafe(hashMatch[1]);
@@ -43,11 +46,15 @@
 
     const internal = window.CTFd && window.CTFd._internal && window.CTFd._internal.challenge;
     if (internal && internal.id) return parseIntSafe(internal.id);
+    const store = window.Alpine && Alpine.store && Alpine.store("challenge");
+    if (store && store.data && store.data.id) return parseIntSafe(store.data.id);
 
     return null;
   }
 
   function findTarget(root = document) {
+    const challengePane = root.querySelector("#challenge");
+    if (challengePane) return challengePane;
     if (root && typeof root.matches === "function") {
       if (root.matches("#challenge-window") || root.matches("#challenge-modal")) {
         return root.querySelector(".modal-body") || root;
