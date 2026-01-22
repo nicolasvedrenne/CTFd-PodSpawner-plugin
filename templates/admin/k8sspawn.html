@@ -1,0 +1,75 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container">
+  <h3>Kubernetes Spawn</h3>
+  <p class="text-muted">
+    Configure chaque challenge pour autoriser le déploiement d'une instance éphémère dans le namespace {{ namespace }}.
+    Le préfixe d'image global (env K8SSPAWN_IMAGE_PREFIX) est appliqué en plus de l'allowlist spécifique.
+  </p>
+
+  {% for chal in challenges %}
+    {% set cfg = configs.get(chal.id) %}
+    <form method="post" action="{{ url_for('k8sspawn.admin_save_config', challenge_id=chal.id) }}" class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>{{ chal.name }} (#{{ chal.id }})</span>
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="enabled-{{ chal.id }}" name="enabled" {% if cfg and cfg.enabled %}checked{% endif %}>
+          <label class="form-check-label" for="enabled-{{ chal.id }}">Enable</label>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label class="form-label">Image (allowlist)</label>
+            <input type="text" class="form-control" name="image" value="{{ cfg.image if cfg else '' }}" placeholder="registry.local/ctf/challenge:latest" required>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="form-label">Port conteneur</label>
+            <input type="number" class="form-control" name="container_port" value="{{ cfg.container_port if cfg else '' }}" min="1" required>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="form-label">TTL (secondes)</label>
+            <input type="number" class="form-control" name="ttl_seconds" value="{{ cfg.ttl_seconds if cfg else 1800 }}" min="60" required>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-3 mb-2">
+            <label class="form-label">CPU request</label>
+            <input type="text" class="form-control" name="cpu_request" value="{{ cfg.cpu_request if cfg else '' }}" placeholder="100m" required>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="form-label">CPU limit</label>
+            <input type="text" class="form-control" name="cpu_limit" value="{{ cfg.cpu_limit if cfg else '' }}" placeholder="500m" required>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="form-label">Mem request</label>
+            <input type="text" class="form-control" name="mem_request" value="{{ cfg.mem_request if cfg else '' }}" placeholder="128Mi" required>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="form-label">Mem limit</label>
+            <input type="text" class="form-control" name="mem_limit" value="{{ cfg.mem_limit if cfg else '' }}" placeholder="256Mi" required>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Protocol</label>
+            <select class="form-select" name="protocol">
+              {% set proto = cfg.protocol if cfg else 'http' %}
+              <option value="http" {% if proto == 'http' %}selected{% endif %}>http</option>
+              <option value="https" {% if proto == 'https' %}selected{% endif %}>https</option>
+            </select>
+          </div>
+          <div class="col-md-8 mb-2">
+            <label class="form-label">Allowlist prefix (optionnel)</label>
+            <input type="text" class="form-control" name="allowlist_prefix" value="{{ cfg.allowlist_prefix if cfg else '' }}" placeholder="registry.local/ctf/">
+          </div>
+        </div>
+      </div>
+      <div class="card-footer text-end">
+        <button type="submit" class="btn btn-success btn-sm">Enregistrer</button>
+      </div>
+    </form>
+  {% endfor %}
+</div>
+{% endblock %}
