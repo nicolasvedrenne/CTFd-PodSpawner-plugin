@@ -12,6 +12,14 @@
   let pollTimer = null;
   let detectTimer = null;
   let expiresAt = null;
+  const basePath = (() => {
+    const root = (window.CTFd && window.CTFd.config && window.CTFd.config.urlRoot) || "";
+    return root.endsWith("/") ? root.slice(0, -1) : root;
+  })();
+  const csrfToken =
+    (window.init && init.csrfNonce) ||
+    (window.CTFd && window.CTFd.config && window.CTFd.config.csrfNonce) ||
+    null;
 
   function parseIntSafe(val) {
     const n = parseInt(val, 10);
@@ -168,9 +176,12 @@
   }
 
   async function api(path, opts) {
-    const resp = await fetch(`/plugins/podspawner/${path}`, {
+    const url = `${basePath}/plugins/podspawner/${path}`;
+    const headers = { "Content-Type": "application/json" };
+    if (csrfToken) headers["CSRF-Token"] = csrfToken;
+    const resp = await fetch(url, {
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
+      headers,
       ...opts,
     });
     const data = await resp.json().catch(() => ({}));
