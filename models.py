@@ -69,6 +69,8 @@ class K8sInstance(db.Model):
     k8s_namespace = db.Column(db.String(64), nullable=False, default="ctf-challenges")
     deployment_name = db.Column(db.String(128), nullable=False)
     service_name = db.Column(db.String(128), nullable=False)
+    route_name = db.Column(db.String(128))
+    hostname = db.Column(db.String(256))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)
     status = db.Column(db.String(16), default=STATUS_PENDING, nullable=False)
@@ -93,6 +95,7 @@ class K8sInstance(db.Model):
             "user_id": self.user_id,
             "status": self.status,
             "endpoint": self.endpoint,
+            "hostname": self.hostname,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "last_error": self.last_error,
         }

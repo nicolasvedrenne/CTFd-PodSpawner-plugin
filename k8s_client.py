@@ -170,6 +170,47 @@ class K8sClient:
             expected=(200, 201, 202),
         )
 
+    def create_http_route(
+        self,
+        name,
+        hostname,
+        service_name,
+        service_port,
+        labels,
+        gateway_name,
+        gateway_namespace=None,
+    ):
+        manifest = {
+            "apiVersion": "gateway.networking.k8s.io/v1beta1",
+            "kind": "HTTPRoute",
+            "metadata": {"name": name, "namespace": self.namespace, "labels": labels},
+            "spec": {
+                "parentRefs": [
+                    {
+                        "name": gateway_name,
+                        **({"namespace": gateway_namespace} if gateway_namespace else {}),
+                    }
+                ],
+                "hostnames": [hostname],
+                "rules": [
+                    {
+                        "backendRefs": [
+                            {
+                                "name": service_name,
+                                "port": service_port,
+                            }
+                        ]
+                    }
+                ],
+            },
+        }
+        return self._request(
+            "POST",
+            self._ns_path("/apis/gateway.networking.k8s.io/v1beta1/namespaces/{namespace}/httproutes"),
+            body=manifest,
+            expected=(200, 201, 202),
+        )
+
     def get_deployment_status(self, name):
         status_code, payload = self._request(
             "GET",
@@ -204,5 +245,14 @@ class K8sClient:
         return self._request(
             "DELETE",
             self._ns_path(f"/api/v1/namespaces/{{namespace}}/services/{name}"),
+            expected=(200, 202, 204, 404),
+        )
+
+    def delete_http_route(self, name):
+        return self._request(
+            "DELETE",
+            self._ns_path(
+                f"/apis/gateway.networking.k8s.io/v1beta1/namespaces/{{namespace}}/httproutes/{name}"
+            ),
             expected=(200, 202, 204, 404),
         )

@@ -45,6 +45,32 @@ def _get_namespace():
     return current_app.config.get("PODSPAWNER_NAMESPACE", "ctf-challenges")
 
 
+def _get_gateway_name():
+    return current_app.config.get("PODSPAWNER_GATEWAY_NAME", "ctfd-gateway")
+
+
+def _get_gateway_namespace():
+    return current_app.config.get("PODSPAWNER_GATEWAY_NAMESPACE", _get_namespace())
+
+
+def _get_base_domain():
+    base = current_app.config.get("PODSPAWNER_BASE_DOMAIN")
+    if base:
+        return base
+    server_name = current_app.config.get("SERVER_NAME")
+    if server_name:
+        try:
+            return server_name.split(":")[0]
+        except Exception:
+            pass
+    try:
+        host = request.host.split(":")[0]
+        # keep everything after the first label to allow subdomain usage
+        return host
+    except Exception:
+        return None
+
+
 def _build_client():
     return K8sClient(
         host=current_app.config.get("PODSPAWNER_API_HOST", "kubernetes.default.svc"),
@@ -98,6 +124,13 @@ def _build_endpoint(service_name, namespace, port, protocol="http"):
     if proto not in {"http", "https"}:
         proto = "http"
     return f"{proto}://{service_name}.{namespace}.svc.cluster.local:{port}"
+
+
+def _build_public_endpoint(hostname, protocol="http"):
+    proto = (protocol or "http").lower()
+    if proto not in {"http", "https"}:
+        proto = "http"
+    return f"{proto}://{hostname}"
 
 
 def _rate_limit_seconds():
@@ -240,7 +273,10 @@ def spawn_instance(challenge_id):
     instance_id = str(uuid.uuid4())
     deployment_name = _build_resource_name("deploy", challenge_id, user.id, instance_id)
     service_name = _build_resource_name("svc", challenge_id, user.id, instance_id)
+    route_name = _build_resource_name("route", challenge_id, user.id, instance_id)
     expires_at = _now() + timedelta(seconds=config.ttl_seconds)
+    base_domain = _get_base_domain()
+    hostname = f"{service_name}.{base_domain}" if base_domain else None
 
     labels = {
         "ctf.managed": "true",
@@ -256,6 +292,8 @@ def spawn_instance(challenge_id):
         k8s_namespace=_get_namespace(),
         deployment_name=deployment_name,
         service_name=service_name,
+        route_name=route_name,
+        hostname=hostname,
         created_at=_now(),
         expires_at=expires_at,
         status=STATUS_PENDING,
@@ -288,11 +326,24 @@ def spawn_instance(challenge_id):
             target_port=config.container_port,
             labels=labels,
         )
+        if hostname:
+            _ = client.create_http_route(
+                name=route_name,
+                hostname=hostname,
+                service_name=service_name,
+                service_port=config.container_port,
+                labels=labels,
+                gateway_name=_get_gateway_name(),
+                gateway_namespace=_get_gateway_namespace(),
+            )
         status_info = client.get_deployment_status(deployment_name)
         instance.status = STATUS_READY if status_info.get("ready") else STATUS_PENDING
-        instance.endpoint = _build_endpoint(
-            service_name, _get_namespace(), config.container_port, config.protocol
-        )
+        if hostname:
+            instance.endpoint = _build_public_endpoint(hostname, config.protocol)
+        else:
+            instance.endpoint = _build_endpoint(
+                service_name, _get_namespace(), config.container_port, config.protocol
+            )
         db.session.add(instance)
         db.session.commit()
     except (K8sApiError, SQLAlchemyError) as exc:
@@ -304,6 +355,11 @@ def spawn_instance(challenge_id):
         try:
             client.delete_service(service_name)
             client.delete_deployment(deployment_name)
+            if route_name:
+                try:
+                    client.delete_http_route(route_name)
+                except Exception:
+                    pass
         except Exception:
             pass
         return jsonify({"success": False, "message": "Kubernetes error", "error": str(exc)}), 500
@@ -331,6 +387,11 @@ def stop_instance(challenge_id):
     try:
         client.delete_service(inst.service_name)
         client.delete_deployment(inst.deployment_name)
+        if inst.route_name:
+            try:
+                client.delete_http_route(inst.route_name)
+            except Exception:
+                pass
     except K8sApiError as exc:
         inst.last_error = str(exc)
     inst.status = STATUS_STOPPED
@@ -396,6 +457,11 @@ def cleanup_expired_instances():
         try:
             client.delete_service(inst.service_name)
             client.delete_deployment(inst.deployment_name)
+            if inst.route_name:
+                try:
+                    client.delete_http_route(inst.route_name)
+                except Exception:
+                    pass
         except Exception as exc:
             inst.last_error = str(exc)
         inst.status = STATUS_EXPIRED
