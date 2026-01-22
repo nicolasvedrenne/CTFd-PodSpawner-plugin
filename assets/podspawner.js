@@ -1,6 +1,16 @@
 (() => {
   const POLL_INTERVAL_MS = 4000;
 
+  let currentChallengeId = null;
+  let container = null;
+  let statusLine = null;
+  let endpointLine = null;
+  let expiresLine = null;
+  let spawnBtn = null;
+  let stopBtn = null;
+  let pollTimer = null;
+  let expiresAt = null;
+
   function detectChallengeId() {
     const fromData = document.querySelector("[data-challenge-id]");
     if (fromData && fromData.dataset.challengeId) {
@@ -17,62 +27,83 @@
     return null;
   }
 
-  const challengeId = detectChallengeId();
-  if (!challengeId) {
-    return;
+  function teardown() {
+    if (pollTimer) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    expiresAt = null;
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+    container = null;
+    statusLine = null;
+    endpointLine = null;
+    expiresLine = null;
+    spawnBtn = null;
+    stopBtn = null;
+    currentChallengeId = null;
   }
 
-  const container = document.createElement("div");
-  container.id = "k8s-spawn-widget";
-  container.style.border = "1px solid #e5e5e5";
-  container.style.padding = "12px";
-  container.style.marginTop = "12px";
-  container.style.borderRadius = "8px";
+  function createContainer() {
+    container = document.createElement("div");
+    container.id = "k8s-spawn-widget";
+    container.style.border = "1px solid #e5e5e5";
+    container.style.padding = "12px";
+    container.style.marginTop = "12px";
+    container.style.borderRadius = "8px";
 
-  const title = document.createElement("div");
-  title.textContent = "Instance Kubernetes";
-  title.style.fontWeight = "bold";
-  title.style.marginBottom = "6px";
+    const title = document.createElement("div");
+    title.textContent = "Instance Kubernetes";
+    title.style.fontWeight = "bold";
+    title.style.marginBottom = "6px";
 
-  const statusLine = document.createElement("div");
-  const endpointLine = document.createElement("div");
-  endpointLine.style.wordBreak = "break-all";
-  const expiresLine = document.createElement("div");
+    statusLine = document.createElement("div");
+    endpointLine = document.createElement("div");
+    endpointLine.style.wordBreak = "break-all";
+    expiresLine = document.createElement("div");
 
-  const buttons = document.createElement("div");
-  buttons.style.marginTop = "8px";
-  const spawnBtn = document.createElement("button");
-  spawnBtn.textContent = "Déployer";
-  spawnBtn.className = "btn btn-primary btn-sm";
+    const buttons = document.createElement("div");
+    buttons.style.marginTop = "8px";
+    spawnBtn = document.createElement("button");
+    spawnBtn.textContent = "Déployer";
+    spawnBtn.className = "btn btn-primary btn-sm";
 
-  const stopBtn = document.createElement("button");
-  stopBtn.textContent = "Arrêter";
-  stopBtn.className = "btn btn-outline-danger btn-sm";
-  stopBtn.style.marginLeft = "6px";
+    stopBtn = document.createElement("button");
+    stopBtn.textContent = "Arrêter";
+    stopBtn.className = "btn btn-outline-danger btn-sm";
+    stopBtn.style.marginLeft = "6px";
 
-  buttons.appendChild(spawnBtn);
-  buttons.appendChild(stopBtn);
-  container.appendChild(title);
-  container.appendChild(statusLine);
-  container.appendChild(endpointLine);
-  container.appendChild(expiresLine);
-  container.appendChild(buttons);
+    buttons.appendChild(spawnBtn);
+    buttons.appendChild(stopBtn);
+    container.appendChild(title);
+    container.appendChild(statusLine);
+    container.appendChild(endpointLine);
+    container.appendChild(expiresLine);
+    container.appendChild(buttons);
 
-  const target =
-    document.querySelector("#challenge-window .modal-body") ||
-    document.querySelector("#challenge-window") ||
-    document.querySelector(".challenge-body") ||
-    document.querySelector(".challenge-details") ||
-    document.querySelector("main") ||
-    document.body;
-  target.appendChild(container);
+    const target =
+      document.querySelector("#challenge-window .modal-body") ||
+      document.querySelector("#challenge-window") ||
+      document.querySelector(".challenge-body") ||
+      document.querySelector(".challenge-details") ||
+      document.querySelector("main") ||
+      document.body;
+    target.appendChild(container);
 
-  let pollTimer = null;
-  let expiresAt = null;
+    spawnBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      spawn();
+    });
+    stopBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      stop();
+    });
+  }
 
   function setLoading(isLoading) {
-    spawnBtn.disabled = isLoading;
-    stopBtn.disabled = isLoading;
+    if (spawnBtn) spawnBtn.disabled = isLoading;
+    if (stopBtn) stopBtn.disabled = isLoading;
   }
 
   function updateView(instance) {
@@ -112,8 +143,9 @@
   }
 
   async function refreshStatus() {
+    if (!currentChallengeId) return;
     try {
-      const data = await api(`status/${challengeId}`, { method: "GET" });
+      const data = await api(`status/${currentChallengeId}`, { method: "GET" });
       updateView(data.instance);
     } catch (err) {
       updateView(null);
@@ -121,9 +153,10 @@
   }
 
   async function spawn() {
+    if (!currentChallengeId) return;
     setLoading(true);
     try {
-      const data = await api(`spawn/${challengeId}`, { method: "POST" });
+      const data = await api(`spawn/${currentChallengeId}`, { method: "POST" });
       updateView(data.instance);
     } catch (err) {
       alert(`Impossible de déployer : ${err.message}`);
@@ -133,9 +166,10 @@
   }
 
   async function stop() {
+    if (!currentChallengeId) return;
     setLoading(true);
     try {
-      const data = await api(`stop/${challengeId}`, { method: "POST" });
+      const data = await api(`stop/${currentChallengeId}`, { method: "POST" });
       updateView(data.instance);
     } catch (err) {
       alert(`Arrêt impossible : ${err.message}`);
@@ -158,18 +192,28 @@
     }
   }
 
-  spawnBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    spawn();
-  });
-  stopBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    stop();
-  });
-
-  refreshStatus();
-  pollTimer = window.setInterval(() => {
+  function mountFor(challengeId) {
+    if (!challengeId) return;
+    if (challengeId === currentChallengeId) return;
+    teardown();
+    currentChallengeId = challengeId;
+    createContainer();
     refreshStatus();
-    tickCountdown();
-  }, POLL_INTERVAL_MS);
+    pollTimer = window.setInterval(() => {
+      refreshStatus();
+      tickCountdown();
+    }, POLL_INTERVAL_MS);
+  }
+
+  function tryMount() {
+    const challengeId = detectChallengeId();
+    if (challengeId) {
+      mountFor(challengeId);
+    }
+  }
+
+  tryMount();
+  const observer = new MutationObserver(tryMount);
+  observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener("hashchange", tryMount);
 })();
