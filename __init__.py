@@ -10,8 +10,8 @@ from .routes import k8s_bp, schedule_cleanup_loop
 
 
 def load(app):
-    register_plugin_assets_directory(app, base_path="/plugins/k8sspawn/assets")
-    register_plugin_script("/plugins/k8sspawn/assets/k8sspawn.js")
+    register_plugin_assets_directory(app, base_path="/plugins/podspawner/assets")
+    register_plugin_script("/plugins/podspawner/assets/podspawner.js")
 
     app.register_blueprint(k8s_bp)
 

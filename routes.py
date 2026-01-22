@@ -22,11 +22,11 @@ from .models import (
 )
 
 k8s_bp = Blueprint(
-    "k8sspawn",
+    "podspawner",
     __name__,
     template_folder="templates",
     static_folder="assets",
-    url_prefix="/plugins/k8sspawn",
+    url_prefix="/plugins/podspawner",
 )
 
 
@@ -35,22 +35,22 @@ def _now():
 
 
 def _get_namespace():
-    return current_app.config.get("K8SSPAWN_NAMESPACE", "ctf-challenges")
+    return current_app.config.get("PODSPAWNER_NAMESPACE", "ctf-challenges")
 
 
 def _build_client():
     return K8sClient(
-        host=current_app.config.get("K8SSPAWN_API_HOST", "kubernetes.default.svc"),
+        host=current_app.config.get("PODSPAWNER_API_HOST", "kubernetes.default.svc"),
         namespace=_get_namespace(),
         token_path=current_app.config.get(
-            "K8SSPAWN_TOKEN_PATH",
+            "PODSPAWNER_TOKEN_PATH",
             "/var/run/secrets/kubernetes.io/serviceaccount/token",
         ),
         ca_path=current_app.config.get(
-            "K8SSPAWN_CA_PATH",
+            "PODSPAWNER_CA_PATH",
             "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
         ),
-        timeout=int(current_app.config.get("K8SSPAWN_API_TIMEOUT", 5)),
+        timeout=int(current_app.config.get("PODSPAWNER_API_TIMEOUT", 5)),
     )
 
 
@@ -63,7 +63,7 @@ def _get_client_safe():
 
 
 def _image_allowed(image, allowlist_prefix=None):
-    prefix = allowlist_prefix or current_app.config.get("K8SSPAWN_IMAGE_PREFIX")
+    prefix = allowlist_prefix or current_app.config.get("PODSPAWNER_IMAGE_PREFIX")
     if prefix:
         return image.startswith(prefix)
     return True
@@ -95,7 +95,7 @@ def _build_endpoint(service_name, namespace, port, protocol="http"):
 
 def _rate_limit_seconds():
     try:
-        return int(current_app.config.get("K8SSPAWN_RATE_LIMIT_SECONDS", 10))
+        return int(current_app.config.get("PODSPAWNER_RATE_LIMIT_SECONDS", 10))
     except (TypeError, ValueError):
         return 10
 
@@ -139,7 +139,7 @@ def admin_index():
     challenges = Challenges.query.all()
     configs = {cfg.challenge_id: cfg for cfg in K8sChallengeConfig.query.all()}
     return render_template(
-        "admin/k8sspawn.html",
+        "admin/podspawner.html",
         challenges=challenges,
         configs=configs,
         namespace=_get_namespace(),
@@ -167,7 +167,7 @@ def admin_save_config(challenge_id):
     db.session.commit()
     if request.is_json:
         return jsonify({"success": True, "config": config.to_dict()})
-    return redirect(url_for("k8sspawn.admin_index"))
+    return redirect(url_for("podspawner.admin_index"))
 
 
 def _get_latest_instance(challenge_id, user_id):

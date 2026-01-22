@@ -98,7 +98,7 @@
   }
 
   async function api(path, opts) {
-    const resp = await fetch(`/plugins/k8sspawn/${path}`, {
+    const resp = await fetch(`/plugins/podspawner/${path}`, {
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       ...opts,

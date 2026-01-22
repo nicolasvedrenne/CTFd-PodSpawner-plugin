@@ -5,12 +5,12 @@
   <h3>Kubernetes Spawn</h3>
   <p class="text-muted">
     Configure chaque challenge pour autoriser le déploiement d'une instance éphémère dans le namespace {{ namespace }}.
-    Le préfixe d'image global (env K8SSPAWN_IMAGE_PREFIX) est appliqué en plus de l'allowlist spécifique.
+    Le préfixe d'image global (env PODSPAWNER_IMAGE_PREFIX) est appliqué en plus de l'allowlist spécifique.
   </p>
 
   {% for chal in challenges %}
     {% set cfg = configs.get(chal.id) %}
-    <form method="post" action="{{ url_for('k8sspawn.admin_save_config', challenge_id=chal.id) }}" class="card mb-3">
+    <form method="post" action="{{ url_for('podspawner.admin_save_config', challenge_id=chal.id) }}" class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>{{ chal.name }} (#{{ chal.id }})</span>
         <div class="form-check">
