@@ -326,21 +326,33 @@ def spawn_instance(challenge_id):
             target_port=config.container_port,
             labels=labels,
         )
+        route_created = False
         if hostname:
-            _ = client.create_http_route(
-                name=route_name,
-                hostname=hostname,
-                service_name=service_name,
-                service_port=config.container_port,
-                labels=labels,
-                gateway_name=_get_gateway_name(),
-                gateway_namespace=_get_gateway_namespace(),
-            )
+            try:
+                _ = client.create_http_route(
+                    name=route_name,
+                    hostname=hostname,
+                    service_name=service_name,
+                    service_port=config.container_port,
+                    labels=labels,
+                    gateway_name=_get_gateway_name(),
+                    gateway_namespace=_get_gateway_namespace(),
+                )
+                route_created = True
+            except K8sApiError as exc:
+                current_app.logger.warning(
+                    "HTTPRoute creation failed, falling back to cluster IP: %s", exc
+                )
+                hostname = None
         status_info = client.get_deployment_status(deployment_name)
         instance.status = STATUS_READY if status_info.get("ready") else STATUS_PENDING
-        if hostname:
+        if hostname and route_created:
             instance.endpoint = _build_public_endpoint(hostname, config.protocol)
+            instance.hostname = hostname
+            instance.route_name = route_name
         else:
+            instance.route_name = None
+            instance.hostname = None
             instance.endpoint = _build_endpoint(
                 service_name, _get_namespace(), config.container_port, config.protocol
             )
