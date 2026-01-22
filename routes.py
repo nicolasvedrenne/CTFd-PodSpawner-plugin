@@ -21,12 +21,19 @@ from .models import (
     STATUS_STOPPED,
 )
 
-k8s_bp = Blueprint(
+pod_bp = Blueprint(
     "podspawner",
     __name__,
     template_folder="templates",
     static_folder="assets",
     url_prefix="/plugins/podspawner",
+)
+
+admin_bp = Blueprint(
+    "podspawner_admin",
+    __name__,
+    template_folder="templates",
+    url_prefix="/admin/plugins/podspawner",
 )
 
 
@@ -133,7 +140,7 @@ def _validate_config(config: K8sChallengeConfig):
     return True, None
 
 
-@k8s_bp.route("/admin", methods=["GET"])
+@admin_bp.route("/", methods=["GET"])
 @admins_only
 def admin_index():
     challenges = Challenges.query.all()
@@ -146,7 +153,7 @@ def admin_index():
     )
 
 
-@k8s_bp.route("/admin/<int:challenge_id>", methods=["POST"])
+@admin_bp.route("/<int:challenge_id>", methods=["POST"])
 @admins_only
 def admin_save_config(challenge_id):
     data = request.form or request.json or {}
@@ -167,7 +174,7 @@ def admin_save_config(challenge_id):
     db.session.commit()
     if request.is_json:
         return jsonify({"success": True, "config": config.to_dict()})
-    return redirect(url_for("podspawner.admin_index"))
+    return redirect(url_for("podspawner_admin.admin_index"))
 
 
 def _get_latest_instance(challenge_id, user_id):
@@ -207,7 +214,7 @@ def _enforce_rate_limit(challenge_id, user_id):
     return _now() - latest.created_at < window
 
 
-@k8s_bp.route("/spawn/<int:challenge_id>", methods=["POST"])
+@pod_bp.route("/spawn/<int:challenge_id>", methods=["POST"])
 @authed_only
 def spawn_instance(challenge_id):
     user = get_current_user()
@@ -304,7 +311,7 @@ def spawn_instance(challenge_id):
     return jsonify({"success": True, "instance": _serialize_instance(instance)})
 
 
-@k8s_bp.route("/stop/<int:challenge_id>", methods=["POST"])
+@pod_bp.route("/stop/<int:challenge_id>", methods=["POST"])
 @authed_only
 def stop_instance(challenge_id):
     user = get_current_user()
@@ -333,7 +340,7 @@ def stop_instance(challenge_id):
     return jsonify({"success": True, "instance": _serialize_instance(inst)})
 
 
-@k8s_bp.route("/status/<int:challenge_id>", methods=["GET"])
+@pod_bp.route("/status/<int:challenge_id>", methods=["GET"])
 @authed_only
 def instance_status(challenge_id):
     user = get_current_user()
@@ -363,7 +370,7 @@ def instance_status(challenge_id):
     return jsonify({"success": True, "instance": _serialize_instance(inst)})
 
 
-@k8s_bp.route("/cron/cleanup", methods=["POST"])
+@admin_bp.route("/cron/cleanup", methods=["POST"])
 @admins_only
 def cleanup_route():
     cleaned = cleanup_expired_instances()
